@@ -174,6 +174,7 @@ def search(
 
     for hit in hits:
         url = hit["_source"]["url"]
+        url = url.split('#')[0]
 
         # ---- STEP 4: Remove Duplicates ----
         if url in seen_urls:
