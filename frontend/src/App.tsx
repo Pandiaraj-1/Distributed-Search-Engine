@@ -18,7 +18,7 @@ interface Stats {
 
 /* ── tiny Google-colour logo ── */
 function Logo({ size = 92 }: { size?: number }) {
-  const s = { fontSize: size, fontWeight: 700, letterSpacing: -2, lineHeight: 1, fontFamily: "Product Sans,Arial,sans-serif", userSelect: "none" as const };
+  const s = { fontSize: size, fontWeight: 700, letterSpacing: -2, lineHeight: 1, fontFamily: "Google Sans", userSelect: "none" as const };
   return (
     <span style={s}>
       <span style={{ color: "#4285F4" }}>S</span>
@@ -153,7 +153,7 @@ export default function App() {
 
   /* ─────────────── HOME PAGE ─────────────── */
   if (!searched) return (
-    <div style={{ minHeight:"100vh", background:"#fff", fontFamily:"arial,sans-serif", display:"flex", flexDirection:"column" }}>
+    <div style={{ minHeight:"100vh", background:"#fff", fontFamily:"Google Sans, Arial, sans-serif", display:"flex", flexDirection:"column" }}>
 
       {/* top nav */}
       <div style={{ display:"flex", justifyContent:"flex-end", padding:"14px 20px", gap:8 }}>
@@ -214,14 +214,14 @@ export default function App() {
         {/* buttons */}
         <div style={{ display:"flex", gap:12, marginTop:28 }}>
           <button onClick={() => handleSearch(query)}
-            style={{ padding:"10px 22px", background:"#f8f9fa", color:"#3c4043", border:"1px solid #f8f9fa", borderRadius:4, fontSize:14, cursor:"pointer", fontFamily:"arial,sans-serif" }}
+            style={{ padding:"10px 22px", background:"#f8f9fa", color:"#3c4043", border:"1px solid #f8f9fa", borderRadius:4, fontSize:14, cursor:"pointer", fontFamily:"Google Sans, Arial, sans-serif" }}
             onMouseEnter={e => { (e.currentTarget.style.border="1px solid #dadce0"); (e.currentTarget.style.boxShadow="0 1px 2px rgba(0,0,0,.1)"); }}
             onMouseLeave={e => { (e.currentTarget.style.border="1px solid #f8f9fa"); (e.currentTarget.style.boxShadow="none"); }}
           >
             SearchX Search
           </button>
           <button onClick={() => { const t = QUICK[Math.floor(Math.random()*QUICK.length)]; setQuery(t); handleSearch(t); }}
-            style={{ padding:"10px 22px", background:"#f8f9fa", color:"#3c4043", border:"1px solid #f8f9fa", borderRadius:4, fontSize:14, cursor:"pointer", fontFamily:"arial,sans-serif" }}
+            style={{ padding:"10px 22px", background:"#f8f9fa", color:"#3c4043", border:"1px solid #f8f9fa", borderRadius:4, fontSize:14, cursor:"pointer", fontFamily:"Google Sans, Arial, sans-serif" }}
             onMouseEnter={e => { (e.currentTarget.style.border="1px solid #dadce0"); (e.currentTarget.style.boxShadow="0 1px 2px rgba(0,0,0,.1)"); }}
             onMouseLeave={e => { (e.currentTarget.style.border="1px solid #f8f9fa"); (e.currentTarget.style.boxShadow="none"); }}
           >
@@ -265,7 +265,7 @@ export default function App() {
 
   /* ─────────────── RESULTS PAGE ─────────────── */
   return (
-    <div style={{ minHeight:"100vh", background:"#fff", fontFamily:"arial,sans-serif" }}>
+    <div style={{ minHeight:"100vh", background:"#fff", fontFamily:"Google Sans, Arial, sans-serif" }}>
 
       {/* top bar */}
       <div style={{ display:"flex", alignItems:"center", padding:"16px 20px 0", gap:16, borderBottom:"1px solid #ebebeb", paddingBottom:12 }}>
