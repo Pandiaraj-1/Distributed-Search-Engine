@@ -278,14 +278,6 @@ locust --host=http://localhost:8000
 
 ---
 
-## 👨‍💻 Author
-
-**Pandi**
-- GitHub: [@YOUR_USERNAME](https://github.com/YOUR_USERNAME)
-- LinkedIn: [Your LinkedIn](#)
-
----
-
 ## 📄 License
 
 This project is open source and available under the [MIT License](LICENSE).
@@ -299,3 +291,4 @@ This project is open source and available under the [MIT License](LICENSE).
 Built with ❤️ using Python, React, Elasticsearch, Kafka, Redis & Docker
 
 </div>
+
