@@ -15,6 +15,11 @@ from urllib.parse import urljoin, urlparse  # Tools to handle URLs
 from dotenv import load_dotenv       # Tool to read our .env file
 import os                            # Tool to access environment variables
 
+from kafka import KafkaProducer, KafkaConsumer
+import json
+import threading
+
+
 # Load passwords from .env file
 load_dotenv()
 
@@ -61,6 +66,27 @@ conn = psycopg2.connect(
 cursor = conn.cursor()
 
 log.info("✅ Connected to Redis and PostgreSQL!")
+
+# ============================================
+# KAFKA SETUP
+# What: Connect to Kafka message queue
+# Producer = sends URLs to crawl
+# Consumer = receives URLs to crawl
+# ============================================
+
+try:
+    producer = KafkaProducer(
+        bootstrap_servers=os.getenv('KAFKA_BROKER', 'localhost:9092'),
+        # Convert Python dict to JSON text before sending
+        value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+        # Wait max 1 second for Kafka to confirm receipt
+        request_timeout_ms=1000,
+        api_version=(2, 5, 0)
+    )
+    log.info("✅ Connected to Kafka!")
+except Exception as e:
+    log.error(f"❌ Kafka connection failed: {e}")
+    producer = None
 
 # ============================================
 # SECTION 4: CREATE TABLES
@@ -249,7 +275,96 @@ def crawl_page(url):
     except Exception as e:
         log.error(f"❌ Unknown Error crawling {url[:50]}: {e}")
         return []
-    
+# ============================================
+# KAFKA PRODUCER FUNCTION
+# What: Pushes seed URLs into Kafka queue
+# Think of it as: dropping tasks into a shared inbox
+# ============================================
+
+def push_urls_to_kafka(urls, depth=0):
+    """
+    Send URLs to Kafka topic 'urls-to-crawl'
+    Each message contains: url + depth level
+    depth = how many links deep we are from seed
+    """
+    if not producer:
+        log.error("Kafka producer not available!")
+        return
+
+    for url in urls:
+        message = {
+            'url': url,
+            'depth': depth
+        }
+        producer.send('urls-to-crawl', message)
+
+    producer.flush()  # make sure all messages are sent
+    log.info(f"📨 Pushed {len(urls)} URLs to Kafka queue")
+
+
+# ============================================
+# KAFKA WORKER FUNCTION
+# What: A single crawler worker that reads
+#       URLs from Kafka and crawls them
+# We run 3 of these in parallel!
+# ============================================
+
+def kafka_worker(worker_id):
+    """
+    One crawler worker:
+    1. Picks up a URL from Kafka queue
+    2. Crawls it
+    3. Pushes new links back to Kafka
+    4. Repeat forever until max pages reached
+    """
+    log.info(f"🤖 Worker {worker_id} started!")
+
+    # Each worker creates its own Kafka consumer
+    consumer = KafkaConsumer(
+        'urls-to-crawl',
+        bootstrap_servers=os.getenv('KAFKA_BROKER', 'localhost:9092'),
+        # group_id means all workers SHARE the queue
+        # Kafka ensures no two workers get same URL
+        group_id='crawler-workers',
+        value_deserializer=lambda v: json.loads(v.decode('utf-8')),
+        auto_offset_reset='earliest',
+        consumer_timeout_ms=30000,  # stop if no messages for 30 seconds
+        api_version=(2, 5, 0)
+    )
+
+    crawled = 0
+    max_per_worker = 100  # each worker crawls max 100 pages
+
+    for message in consumer:
+        if crawled >= max_per_worker:
+            break
+
+        data = message.value
+        url = data.get('url')
+        depth = data.get('depth', 0)
+
+        # Don't go deeper than 3 links from seed
+        if depth > 3:
+            continue
+
+        # Crawl the page
+        new_links = crawl_page(url)
+
+        # Push new links back to Kafka for other workers
+        if new_links and producer:
+            # Only push first 5 new links to avoid explosion
+            fresh = [l for l in new_links[:5]
+                    if not r.sismember("visited_urls", l)]
+            if fresh:
+                push_urls_to_kafka(fresh, depth=depth + 1)
+
+        crawled += 1
+        log.info(f"🤖 Worker-{worker_id} | Crawled: {crawled}/{max_per_worker}")
+
+    log.info(f"✅ Worker {worker_id} finished! Crawled {crawled} pages")
+    consumer.close()
+
+   
 # ============================================
 # SECTION 7: START THE CRAWLER
 # What: Kicks off crawling from seed URLs
@@ -307,14 +422,21 @@ def start_crawl(seed_urls, max_pages=200, fresh_start=True):
 # ============================================
 
 if __name__ == "__main__":
+    import sys
+
+    # Check if running in distributed mode
+    # Usage:
+    #   python crawler.py           → normal single crawler
+    #   python crawler.py kafka     → distributed 3-worker mode
+
+    mode = sys.argv[1] if len(sys.argv) > 1 else "normal"
+
     seed_urls = [
-        # Computer Science & Programming
         "https://en.wikipedia.org/wiki/Python_(programming_language)",
         "https://en.wikipedia.org/wiki/Computer_science",
         "https://en.wikipedia.org/wiki/Artificial_intelligence",
         "https://en.wikipedia.org/wiki/Machine_learning",
         "https://en.wikipedia.org/wiki/Web_scraping",
-        # More seeds so queue never runs empty
         "https://en.wikipedia.org/wiki/Data_structure",
         "https://en.wikipedia.org/wiki/Algorithm",
         "https://en.wikipedia.org/wiki/Database",
@@ -322,4 +444,41 @@ if __name__ == "__main__":
         "https://en.wikipedia.org/wiki/Operating_system",
     ]
 
-    start_crawl(seed_urls, max_pages=200, fresh_start=True)
+    if mode == "kafka":
+        # ===== DISTRIBUTED MODE =====
+        # 3 workers crawl in parallel via Kafka
+        log.info("🚀 Starting DISTRIBUTED crawler with 3 Kafka workers!")
+
+        # Clear Redis for fresh start
+        r.delete("visited_urls")
+        log.info("🧹 Cleared Redis visited URLs")
+
+        # Push all seed URLs into Kafka queue
+        push_urls_to_kafka(seed_urls)
+
+        # Start 3 workers in parallel threads
+        # Each thread = one crawler worker
+        threads = []
+        for i in range(3):
+            t = threading.Thread(
+                target=kafka_worker,
+                args=(i,),
+                daemon=True  # thread stops when main program stops
+            )
+            t.start()
+            threads.append(t)
+            log.info(f"🤖 Started Worker-{i}")
+
+        # Wait for all 3 workers to finish
+        for t in threads:
+            t.join()
+
+        # Show final results
+        cursor.execute("SELECT COUNT(*) FROM pages")
+        total = cursor.fetchone()[0]
+        log.info(f"🎉 Distributed crawl complete!")
+        log.info(f"🗄️  Total pages in database: {total}")
+
+    else:
+        # ===== NORMAL SINGLE MODE =====
+        start_crawl(seed_urls, max_pages=200, fresh_start=True)
