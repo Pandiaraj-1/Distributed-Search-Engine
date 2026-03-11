@@ -1,0 +1,23 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Environment variables (NEVER upload passwords!)
+.env
+
+# Node
+node_modules/
+build/
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.log
+
+# Docker
+*.pid
