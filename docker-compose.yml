@@ -1,8 +1,10 @@
 services:
 
-  # DATABASE — stores all crawled pages
+  # ── INFRASTRUCTURE SERVICES ──────────────────
+
   postgres:
     image: postgres:14
+    container_name: searchx-postgres
     environment:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: password
@@ -11,16 +13,26 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d searchdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # CACHE — speeds up repeated searches
   redis:
     image: redis:alpine
+    container_name: searchx-redis
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # SEARCH ENGINE — indexes and searches pages
   elasticsearch:
     image: elasticsearch:8.7.0
+    container_name: searchx-elasticsearch
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
@@ -29,17 +41,22 @@ services:
       - "9200:9200"
     volumes:
       - esdata:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 | grep -q 'cluster_name'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
 
-  # KAFKA HELPER — manages Kafka topics
   zookeeper:
     image: confluentinc/cp-zookeeper:7.3.0
+    container_name: searchx-zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
 
-  # MESSAGE QUEUE — distributes crawl jobs to workers
   kafka:
     image: confluentinc/cp-kafka:7.3.0
+    container_name: searchx-kafka
     depends_on:
       - zookeeper
     ports:
@@ -47,9 +64,80 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  # ── APPLICATION SERVICES ─────────────────────
+
+  search_api:
+    build: ./search_api
+    container_name: searchx-api
+    ports:
+      - "8000:8000"
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=searchdb
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ELASTIC_HOST=http://elasticsearch:9200
+      - KAFKA_BROKER=kafka:9092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+
+  crawler:
+    build: ./crawler
+    container_name: searchx-crawler
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=searchdb
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BROKER=kafka:9092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  indexer:
+    build: ./indexer
+    container_name: searchx-indexer
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=searchdb
+      - ELASTIC_HOST=http://elasticsearch:9200
+    depends_on:
+      postgres:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    container_name: searchx-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - search_api
 
 volumes:
   pgdata:
