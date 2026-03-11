@@ -255,33 +255,51 @@ def crawl_page(url):
 # What: Kicks off crawling from seed URLs
 # ============================================
 
-def start_crawl(seed_urls, max_pages=200):
+def start_crawl(seed_urls, max_pages=200, fresh_start=True):
     """
     Start crawling from seed URLs.
-    Uses a queue — visits page, adds new links
-    to queue, repeats until max_pages reached.
+    fresh_start=True clears previous visited URLs
+    so we always crawl fresh pages
     """
-    queue = list(seed_urls)  # start with seed URLs
+
+    # Fix 1: Clear Redis visited URLs for fresh start
+    # This means "forget everything we visited before"
+    if fresh_start:
+        r.delete("visited_urls")
+        log.info("🧹 Cleared previous visited URLs from Redis")
+
+    queue = list(seed_urls)
     crawled_count = 0
 
     log.info(f"🚀 Starting crawl with {len(seed_urls)} seed URLs")
     log.info(f"🎯 Target: {max_pages} pages")
 
     while queue and crawled_count < max_pages:
-        # Take first URL from queue
         url = queue.pop(0)
-
-        # Crawl it and get new links
         new_links = crawl_page(url)
 
-        # Add new links to queue (max 5 per page to avoid explosion)
-        queue.extend(new_links[:5])
+        # Fix 2: Add more links per page (10 instead of 5)
+        # Filter out links we already visited
+        fresh_links = [
+            link for link in new_links
+            if not r.sismember("visited_urls", link)
+        ]
+
+        # Add up to 10 fresh links to queue
+        queue.extend(fresh_links[:10])
+
+        # Remove duplicates from queue
+        queue = list(dict.fromkeys(queue))
 
         crawled_count += 1
-        log.info(f"📊 Progress: {crawled_count}/{max_pages} | Queue: {len(queue)}")
+        log.info(f"📊 Progress: {crawled_count}/{max_pages} | Queue size: {len(queue)}")
 
-    log.info(f"🎉 Crawling complete! Total pages: {crawled_count}")
-
+    log.info(f"🎉 Crawling complete! Total pages crawled: {crawled_count}")
+    
+    # Show final count in database
+    cursor.execute("SELECT COUNT(*) FROM pages")
+    total = cursor.fetchone()[0]
+    log.info(f"🗄️  Total pages in database: {total}")
 
 # ============================================
 # MAIN ENTRY POINT
@@ -289,14 +307,19 @@ def start_crawl(seed_urls, max_pages=200):
 # ============================================
 
 if __name__ == "__main__":
-    # These are our starting pages
-    # The crawler will start here and follow links
     seed_urls = [
+        # Computer Science & Programming
         "https://en.wikipedia.org/wiki/Python_(programming_language)",
         "https://en.wikipedia.org/wiki/Computer_science",
         "https://en.wikipedia.org/wiki/Artificial_intelligence",
         "https://en.wikipedia.org/wiki/Machine_learning",
         "https://en.wikipedia.org/wiki/Web_scraping",
+        # More seeds so queue never runs empty
+        "https://en.wikipedia.org/wiki/Data_structure",
+        "https://en.wikipedia.org/wiki/Algorithm",
+        "https://en.wikipedia.org/wiki/Database",
+        "https://en.wikipedia.org/wiki/Computer_network",
+        "https://en.wikipedia.org/wiki/Operating_system",
     ]
 
-    start_crawl(seed_urls, max_pages=200)
+    start_crawl(seed_urls, max_pages=200, fresh_start=True)
