@@ -14,7 +14,7 @@
 **A production-grade distributed search engine built from scratch.**
 Crawls websites in parallel, indexes content with TF-IDF + PageRank, and serves results through a Google-like UI.
 
-[🚀 Live Demo](#) • [📖 API Docs](http://localhost:8000/docs) • [🐛 Report Bug](#)
+• [📖 API Docs](http://localhost:8000/docs) •
 
 </div>
 
@@ -290,5 +290,6 @@ This project is open source and available under the [MIT License](LICENSE).
 Built with ❤️ using Python, React, Elasticsearch, Kafka, Redis & Docker
 
 </div>
+
 
 
