@@ -24,8 +24,7 @@ Crawls websites in parallel, indexes content with TF-IDF + PageRank, and serves 
 
 | Home Page | Search Results |
 |-----------|---------------|
-| Google-style home with coloured logo | Results with TF-IDF + PageRank scores |
-
+| ![Home](images/home.png) | ![Results](images/results.png) |
 ---
 
 ## ✨ Features
@@ -291,4 +290,5 @@ This project is open source and available under the [MIT License](LICENSE).
 Built with ❤️ using Python, React, Elasticsearch, Kafka, Redis & Docker
 
 </div>
+
 
