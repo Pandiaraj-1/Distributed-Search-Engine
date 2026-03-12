@@ -6,7 +6,6 @@ __pycache__/
 *.pyd
 .Python
 
-# Environment variables (NEVER upload passwords!)
 .env
 
 # Node

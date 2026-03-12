@@ -1,6 +1,6 @@
 services:
 
-  # ── INFRASTRUCTURE SERVICES ──────────────────
+  # INFRASTRUCTURE SERVICES 
 
   postgres:
     image: postgres:14
@@ -73,7 +73,7 @@ services:
       timeout: 10s
       retries: 10
 
-  # ── APPLICATION SERVICES ─────────────────────
+  # APPLICATION SERVICES 
 
   search_api:
     build: ./search_api
