@@ -13,10 +13,7 @@ from kafka import KafkaProducer, KafkaConsumer
 import json
 import threading
 
-
-# Load passwords from .env file
 load_dotenv()
-
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,11 +36,10 @@ conn = psycopg2.connect(
 )
 cursor = conn.cursor()
 
-log.info("✅ Connected to Redis and PostgreSQL!")
+log.info("Connected to Redis and PostgreSQL!")
 
 
 # KAFKA SETUP
-
 try:
     producer = KafkaProducer(
         bootstrap_servers=os.getenv('KAFKA_BROKER', 'localhost:9092'),
@@ -53,9 +49,9 @@ try:
         request_timeout_ms=1000,
         api_version=(2, 5, 0)
     )
-    log.info("✅ Connected to Kafka!")
+    log.info("Connected to Kafka!")
 except Exception as e:
-    log.error(f"❌ Kafka connection failed: {e}")
+    log.error(f"Kafka connection failed: {e}")
     producer = None
 
 def create_tables():
@@ -79,12 +75,9 @@ def create_tables():
     """)
 
     conn.commit()
-    log.info("✅ Database tables created!")
-
+    log.info("Database tables created!")
 
 create_tables()
-
-
 
 def is_valid_url(url):
 
@@ -99,7 +92,6 @@ def is_valid_url(url):
     except:
         return False
 
-
 def save_page(url, title, content):
 
     try:
@@ -112,9 +104,9 @@ def save_page(url, title, content):
             (url, title, content[:10000])  # limit to 10000 chars
         )
         conn.commit()
-        log.info(f"💾 Saved: {title[:50]}")
+        log.info(f"Saved: {title[:50]}")
     except Exception as e:
-        log.error(f"❌ DB Save Error: {e}")
+        log.error(f"DB Save Error: {e}")
         conn.rollback()  # undo failed transaction
 
 
@@ -128,7 +120,7 @@ def save_links(source_url, target_urls):
             )
         conn.commit()
     except Exception as e:
-        log.error(f"❌ Links Save Error: {e}")
+        log.error(f"Links Save Error: {e}")
         conn.rollback()
 
 
@@ -136,7 +128,7 @@ def save_links(source_url, target_urls):
 def crawl_page(url):
 
     if r.sismember("visited_urls", url):
-        log.info(f"⏭️  Already visited: {url[:50]}")
+        log.info(f"Already visited: {url[:50]}")
         return []
 
     try:
@@ -146,7 +138,7 @@ def crawl_page(url):
         response = requests.get(url, timeout=5, headers=headers)
 
         if response.status_code != 200:
-            log.warning(f"⚠️  Status {response.status_code}: {url[:50]}")
+            log.warning(f"Status {response.status_code}: {url[:50]}")
             return []
 
         content_type = response.headers.get('content-type', '')
@@ -174,7 +166,7 @@ def crawl_page(url):
         save_page(url, title, content)
         save_links(url, links[:20])  # save max 20 links per page
 
-        log.info(f"✅ Crawled: {title[:50]} | Found {len(links)} links")
+        log.info(f"Crawled: {title[:50]} | Found {len(links)} links")
 
 
         time.sleep(1)
@@ -182,13 +174,13 @@ def crawl_page(url):
         return links
 
     except requests.exceptions.Timeout:
-        log.error(f"⏱️  Timeout: {url[:50]}")
+        log.error(f"Timeout: {url[:50]}")
         return []
     except requests.exceptions.ConnectionError:
-        log.error(f"🔌 Connection Error: {url[:50]}")
+        log.error(f"Connection Error: {url[:50]}")
         return []
     except Exception as e:
-        log.error(f"❌ Unknown Error crawling {url[:50]}: {e}")
+        log.error(f"Unknown Error crawling {url[:50]}: {e}")
         return []
 
 # KAFKA PRODUCER FUNCTION
@@ -207,21 +199,20 @@ def push_urls_to_kafka(urls, depth=0):
         producer.send('urls-to-crawl', message)
 
     producer.flush()  # make sure all messages are sent
-    log.info(f"📨 Pushed {len(urls)} URLs to Kafka queue")
+    log.info(f"Pushed {len(urls)} URLs to Kafka queue")
 
 
 # KAFKA WORKER FUNCTION
 
 def kafka_worker(worker_id):
     
-    log.info(f"🤖 Worker {worker_id} started!")
+    log.info(f"Worker {worker_id} started!")
 
     # Each worker creates its own Kafka consumer
     consumer = KafkaConsumer(
         'urls-to-crawl',
         bootstrap_servers=os.getenv('KAFKA_BROKER', 'localhost:9092'),
-        # group_id means all workers SHARE the queue
-        # Kafka ensures no two workers get same URL
+
         group_id='crawler-workers',
         value_deserializer=lambda v: json.loads(v.decode('utf-8')),
         auto_offset_reset='earliest',
@@ -239,25 +230,21 @@ def kafka_worker(worker_id):
         url = data.get('url')
         depth = data.get('depth', 0)
 
-        # Don't go deeper than 3 links from seed
         if depth > 3:
             continue
 
-        # Crawl the page
         new_links = crawl_page(url)
 
-        # Push new links back to Kafka for other workers
         if new_links and producer:
-            # Only push first 5 new links to avoid explosion
             fresh = [l for l in new_links[:5]
                     if not r.sismember("visited_urls", l)]
             if fresh:
                 push_urls_to_kafka(fresh, depth=depth + 1)
 
         crawled += 1
-        log.info(f"🤖 Worker-{worker_id} | Crawled: {crawled}/{max_per_worker}")
+        log.info(f"Worker-{worker_id} | Crawled: {crawled}/{max_per_worker}")
 
-    log.info(f"✅ Worker {worker_id} finished! Crawled {crawled} pages")
+    log.info(f"Worker {worker_id} finished! Crawled {crawled} pages")
     consumer.close()
 
 
@@ -266,13 +253,13 @@ def start_crawl(seed_urls, max_pages=200, fresh_start=True):
 
     if fresh_start:
         r.delete("visited_urls")
-        log.info("🧹 Cleared previous visited URLs from Redis")
+        log.info("Cleared previous visited URLs from Redis")
 
     queue = list(seed_urls)
     crawled_count = 0
 
-    log.info(f"🚀 Starting crawl with {len(seed_urls)} seed URLs")
-    log.info(f"🎯 Target: {max_pages} pages")
+    log.info(f"Starting crawl with {len(seed_urls)} seed URLs")
+    log.info(f"Target: {max_pages} pages")
 
     while queue and crawled_count < max_pages:
         url = queue.pop(0)
@@ -290,14 +277,14 @@ def start_crawl(seed_urls, max_pages=200, fresh_start=True):
         queue = list(dict.fromkeys(queue))
 
         crawled_count += 1
-        log.info(f"📊 Progress: {crawled_count}/{max_pages} | Queue size: {len(queue)}")
+        log.info(f"Progress: {crawled_count}/{max_pages} | Queue size: {len(queue)}")
 
-    log.info(f"🎉 Crawling complete! Total pages crawled: {crawled_count}")
+    log.info(f"Crawling complete! Total pages crawled: {crawled_count}")
     
     # Show final count in database
     cursor.execute("SELECT COUNT(*) FROM pages")
     total = cursor.fetchone()[0]
-    log.info(f"🗄️  Total pages in database: {total}")
+    log.info(f"Total pages in database: {total}")
 
 if __name__ == "__main__":
     import sys
@@ -322,16 +309,12 @@ if __name__ == "__main__":
     if mode == "kafka":
         # DISTRIBUTED MODE 
         # 3 workers crawl in parallel via Kafka
-        log.info("🚀 Starting DISTRIBUTED crawler with 3 Kafka workers!")
+        log.info("Starting DISTRIBUTED crawler with 3 Kafka workers!")
 
-        # Clear Redis for fresh start
         r.delete("visited_urls")
-        log.info("🧹 Cleared Redis visited URLs")
+        log.info("Cleared Redis visited URLs")
 
         push_urls_to_kafka(seed_urls)
-
-        # Start 3 workers in parallel threads
-        # Each thread = one crawler worker
         threads = []
         for i in range(3):
             t = threading.Thread(
@@ -341,7 +324,7 @@ if __name__ == "__main__":
             )
             t.start()
             threads.append(t)
-            log.info(f"🤖 Started Worker-{i}")
+            log.info(f"Started Worker-{i}")
 
         # Wait for all 3 workers to finish
         for t in threads:
@@ -350,8 +333,8 @@ if __name__ == "__main__":
         # Show final results
         cursor.execute("SELECT COUNT(*) FROM pages")
         total = cursor.fetchone()[0]
-        log.info(f"🎉 Distributed crawl complete!")
-        log.info(f"🗄️  Total pages in database: {total}")
+        log.info(f"Distributed crawl complete!")
+        log.info(f"Total pages in database: {total}")
 
     else:
         # NORMAL SINGLE MODE 

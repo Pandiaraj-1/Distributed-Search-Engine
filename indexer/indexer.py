@@ -1,5 +1,3 @@
-
-
 import psycopg2            
 from elasticsearch import Elasticsearch 
 import nltk                
@@ -35,7 +33,7 @@ es = Elasticsearch(
 if es.ping():
     log.info("Connected to Elasticsearch!")
 else:
-    log.error("❌ Cannot connect to Elasticsearch!")
+    log.error("SCannot connect to Elasticsearch!")
     exit(1)
 
 # Connect to PostgreSQL (where crawler saved pages)
